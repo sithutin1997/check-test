@@ -71,8 +71,7 @@ async function fetchGitHubStatus() {
         }
       });
     }
-
-    console.log('GitHub Status fetch: success');
+    // console.log('GitHub Status fetch: success');
   } catch (err) {
     console.error('Error fetching GitHub status: Network error');
   }
