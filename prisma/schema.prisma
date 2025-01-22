@@ -1,0 +1,29 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model GitHubStatus {
+  id                 Int      @id @default(autoincrement())
+  timestamp          DateTime
+  description        String?   // from "status.json" -> status.description
+  indicator          String?   // from "status.json" -> status.indicator
+  componentName      String?   // from "components.json"
+  componentStatus    String?   // from "components.json"
+  incidentImpact     String?   // from "incidents.json"
+  incidentName       String?   // from "incidents.json"
+  incidentStatus     String?   // from "incidents.json"
+  maintenanceImpact  String?   // from "scheduled-maintenances.json"
+  maintenanceName    String?   // from "scheduled-maintenances.json"
+  maintenanceStatus  String?   // from "scheduled-maintenances.json"
+}

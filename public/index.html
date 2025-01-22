@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>GitHub Status Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    />
+  </head>
+
+  <body>
+    <div class="container my-4">
+      <h1 class="mb-4">GitHub Status Dashboard</h1>
+      
+      <!-- Filter Form -->
+      <form id="filter-form" class="row g-3 mb-4">
+        <div class="col-auto">
+          <label for="start" class="form-label">Start Date</label>
+          <input type="datetime-local" class="form-control" id="start" name="start" />
+        </div>
+        <div class="col-auto">
+          <label for="end" class="form-label">End Date</label>
+          <input type="datetime-local" class="form-control" id="end" name="end" />
+        </div>
+        <div class="col-auto">
+          <label for="limit" class="form-label">Limit</label>
+          <input type="number" class="form-control" id="limit" name="limit" placeholder="e.g. 10" />
+        </div>
+        <div class="col-auto align-self-end">
+          <button type="button" class="btn btn-primary" onclick="loadResults(1)">Apply Filter</button>
+        </div>
+      </form>
+
+      <!-- Download CSV -->
+      <div class="mb-3">
+        <button class="btn btn-success" onclick="downloadCsv()">Download CSV</button>
+      </div>
+
+      <!-- Results Table -->
+      <table class="table table-bordered" id="results-table">
+        <thead>
+          <tr>
+            <!-- Sortable columns with onClick -->
+            <th onclick="sortColumn('id')">ID <span id="id-sort"></span></th>
+            <th onclick="sortColumn('timestamp')">Timestamp <span id="timestamp-sort"></span></th>
+            <th onclick="sortColumn('description')">Description <span id="description-sort"></span></th>
+            <th onclick="sortColumn('indicator')">Indicator <span id="indicator-sort"></span></th>
+            <th onclick="sortColumn('componentName')">Component Name <span id="componentName-sort"></span></th>
+            <th onclick="sortColumn('componentStatus')">Component Status <span id="componentStatus-sort"></span></th>
+            <th onclick="sortColumn('incidentImpact')">Incident Impact <span id="incidentImpact-sort"></span></th>
+            <th onclick="sortColumn('incidentName')">Incident Name <span id="incidentName-sort"></span></th>
+            <th onclick="sortColumn('incidentStatus')">Incident Status <span id="incidentStatus-sort"></span></th>
+            <th onclick="sortColumn('maintenanceImpact')">Maintenance Impact <span id="maintenanceImpact-sort"></span></th>
+            <th onclick="sortColumn('maintenanceName')">Maintenance Name <span id="maintenanceName-sort"></span></th>
+            <th onclick="sortColumn('maintenanceStatus')">Maintenance Status <span id="maintenanceStatus-sort"></span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Dynamic rows go here -->
+        </tbody>
+      </table>
+
+      <!-- Pagination Controls -->
+      <div class="d-flex justify-content-between align-items-center">
+        <button id="prev-btn" class="btn btn-secondary" onclick="changePage(-1)">Previous</button>
+        <span id="pagination-info"></span>
+        <button id="next-btn" class="btn btn-secondary" onclick="changePage(1)">Next</button>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Main Script -->
+    <script>
+      let currentPage = 1;
+      let totalPages = 1;
+
+      // Default Sort
+      let currentSortBy = 'timestamp';
+      let currentSortOrder = 'desc';
+
+      // Format date for datetime-local input ("YYYY-MM-DDTHH:MM")
+      function formatForDateTimeLocal(date) {
+        const yyyy = date.getFullYear();
+        const MM = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
+      }
+
+      // Set default date/time on page load
+      window.addEventListener('DOMContentLoaded', () => {
+        // Calculate now and now - 5 hours
+        const now = new Date();
+        const minus5Hours = new Date(now.getTime() - (5 * 60 * 60 * 1000));
+        const add1Minute = new Date(now.getTime() + (1 * 60 * 1000));
+        // Set default values in date inputs
+        document.getElementById('start').value = formatForDateTimeLocal(minus5Hours);
+        document.getElementById('end').value = formatForDateTimeLocal(add1Minute);
+
+        // Optional default limit
+        document.getElementById('limit').value = 10; // or any default you want
+
+        loadResults(1);
+      });
+
+      // Build query params including date, limit, sort
+      function buildQueryParams(page) {
+        const start = document.getElementById('start').value;
+        const end = document.getElementById('end').value;
+        const limit = document.getElementById('limit').value;
+
+        const params = new URLSearchParams();
+
+        // Convert input value to ISO if not empty
+        if (start) params.append('start', new Date(start).toISOString());
+        if (end) params.append('end', new Date(end).toISOString());
+
+        // Pagination
+        params.append('page', page || 1);
+        if (limit) params.append('limit', limit);
+
+        // Sorting
+        params.append('sortBy', currentSortBy);
+        params.append('sortOrder', currentSortOrder);
+
+        return params.toString();
+      }
+
+      // Fetch data
+      async function loadResults(page) {
+        try {
+          currentPage = page;
+          const query = buildQueryParams(page);
+          const url = `/results?${query}`;
+          const res = await fetch(url);
+          const json = await res.json();
+
+          if (json.data) {
+            populateTable(json.data);
+            updatePagination(json.meta);
+            updateSortIcons();
+          }
+        } catch (error) {
+          console.error('Error fetching results:', error);
+        }
+      }
+
+      // Populate table body
+      function populateTable(data) {
+        const tbody = document.querySelector('#results-table tbody');
+        tbody.innerHTML = ''; // clear existing rows
+
+        data.forEach((row) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.id}</td>
+            <td>${new Date(row.timestamp).toLocaleString()}</td>
+            <td>${row.description || ''}</td>
+            <td>${row.indicator || ''}</td>
+            <td>${row.componentName || ''}</td>
+            <td>${row.componentStatus || ''}</td>
+            <td>${row.incidentImpact || ''}</td>
+            <td>${row.incidentName || ''}</td>
+            <td>${row.incidentStatus || ''}</td>
+            <td>${row.maintenanceImpact || ''}</td>
+            <td>${row.maintenanceName || ''}</td>
+            <td>${row.maintenanceStatus || ''}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Update pagination info
+      function updatePagination(meta) {
+        currentPage = meta.page;
+        const limit = meta.limit;
+        const totalCount = meta.totalCount;
+        totalPages = Math.ceil(totalCount / limit);
+
+        const paginationInfo = document.getElementById('pagination-info');
+        paginationInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+
+        // Disable/enable prev/next
+        document.getElementById('prev-btn').disabled = currentPage <= 1;
+        document.getElementById('next-btn').disabled = currentPage >= totalPages;
+      }
+
+      // Change page by +/- 1
+      function changePage(direction) {
+        let newPage = currentPage + direction;
+        if (newPage < 1) newPage = 1;
+        if (newPage > totalPages) newPage = totalPages;
+        loadResults(newPage);
+      }
+
+      // Clickable column sorting
+      function sortColumn(column) {
+        if (currentSortBy === column) {
+          // Toggle asc/desc if same column
+          currentSortOrder = (currentSortOrder === 'asc') ? 'desc' : 'asc';
+        } else {
+          // Switch to new column (default asc)
+          currentSortBy = column;
+          currentSortOrder = 'asc';
+        }
+        // Reset to page 1
+        loadResults(1);
+      }
+
+      // Show arrows on sorted column
+      function updateSortIcons() {
+        const columns = [
+          'id', 'timestamp', 'description', 'indicator', 
+          'componentName', 'componentStatus', 'incidentImpact',
+          'incidentName', 'incidentStatus', 'maintenanceImpact', 
+          'maintenanceName', 'maintenanceStatus'
+        ];
+
+        // Clear all sort icons
+        columns.forEach(col => {
+          document.getElementById(`${col}-sort`).textContent = '';
+        });
+
+        // Display arrow for current column
+        const arrow = currentSortOrder === 'asc' ? '↑' : '↓';
+        document.getElementById(`${currentSortBy}-sort`).textContent = arrow;
+      }
+
+      // Download CSV with current filters/sorting
+      function downloadCsv() {
+        const query = buildQueryParams(currentPage);
+        const url = `/download-csv?${query}`;
+        window.location = url;
+      }
+    </script>
+  </body>
+</html>
